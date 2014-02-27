@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""
+'''
 Run nagios plugins/checks from salt and get the return as data.
-"""
+'''
 
 # Import python libs
 import os
@@ -13,26 +13,40 @@ import logging
 
 log = logging.getLogger(__name__)
 
-PLUGINDIR = '/usr/lib/nagios/plugins/'
+#Get nagios_config pillar to get plugin_dir, if not exist the pillar then assign a default path
+PLUGINDIR = '/usr/lib/nagios/plugins'
+
+
+def _set_plugindir():
+    #Get nagios_config pillar to get plugin_dir, if not exist the pillar then assign a default path
+    nagios_plugin_dir = __pillar__['nagios_config'][0]['plugin_dir']
+    log.info('Pillar data {0}'.format(nagios_plugin_dir))
+    if nagios_plugin_dir is None:
+        plugindir = '/usr/lib/nagios/plugins/'
+    else:
+        plugindir = nagios_plugin_dir
+    return plugindir
 
 
 def __virtual__():
-    """
+    '''
     Only load if nagios-plugins are installed
-    """
-
-    if os.path.isdir('/usr/lib/nagios/'):
+    '''
+    global PLUGINDIR
+    PLUGINDIR = _set_plugindir()
+    if os.path.isdir(PLUGINDIR):
         return 'nagios'
     return False
 
 
-def _execute_cmd(plugin, args='', run_type='cmd.retcode', key_name=None):
-    """
+def _execute_cmd(plugin, args='', run_type='cmd.retcode'):
+    '''
     Execute nagios plugin if it's in the directory with salt command specified in run_type
-    """
+    '''
     data = {}
 
     all_plugins = list_plugins()
+    log.info('PLUGINDIR {0}'.format(PLUGINDIR))
     if plugin in all_plugins:
         data = __salt__[run_type]('{0}{1} {2}'.format(PLUGINDIR, plugin, args))
 
@@ -40,7 +54,7 @@ def _execute_cmd(plugin, args='', run_type='cmd.retcode', key_name=None):
 
 
 def _execute_pillar(pillar_name, run_type):
-    """
+    '''
     Run one or more nagios plugins from pillar data and get the result of run_type
     The pillar have to be in this format:
     ------
@@ -53,8 +67,7 @@ def _execute_pillar(pillar_name, run_type):
         APT:
             - check_apt
     -------
-    """
-
+    '''
     groups = __salt__['pillar.get'](pillar_name)
 
     data = {}
@@ -86,18 +99,17 @@ def _format_dict_key(args, plugin):
 
 
 def run(plugin, args='', key_name=None):
-    """
+    '''
     Run nagios plugin and return all the data execution with cmd.run
 
-    """
-
-    data = _execute_cmd(plugin, args, 'cmd.run', key_name)
+    '''
+    data = _execute_cmd(plugin, args, 'cmd.run')
 
     return data
 
 
 def retcode(plugin, args='', key_name=None):
-    """
+    '''
     Run one nagios plugin and return retcode of the execution
 
     CLI Example:
@@ -106,8 +118,7 @@ def retcode(plugin, args='', key_name=None):
 
     salt '*' nagios.run check_apt
     salt '*' nagios.run check_icmp '8.8.8.8'
-
-    """
+    '''
     data = {}
 
     # Remove all the spaces, the key must not have any space
@@ -116,25 +127,22 @@ def retcode(plugin, args='', key_name=None):
 
     data[key_name] = {}
 
-    status = _execute_cmd(plugin, args, 'cmd.retcode', key_name)
+    status = _execute_cmd(plugin, args, 'cmd.retcode')
     data[key_name]['status'] = status
 
     return data
 
 
 def run_all(plugin, args='', key_name=None):
-    """
+    '''
     Run nagios plugin and return all the data execution with cmd.run_all
-
-    """
-
-    data = _execute_cmd(plugin, args, 'cmd.run_all', key_name)
-
+    '''
+    data = _execute_cmd(plugin, args, 'cmd.run_all')
     return data
 
 
 def retcode_pillar(pillar_name):
-    """
+    '''
     Run one or more nagios plugins from pillar data and get the result of cdm.retcode
     The pillar have to be in this format:
     ------
@@ -154,9 +162,7 @@ def retcode_pillar(pillar_name):
     .. code-block:: bash
 
         salt '*' nagios.retcode webserver
-
-    """
-
+    '''
     groups = __salt__['pillar.get'](pillar_name)
 
     check = {}
@@ -191,7 +197,7 @@ def retcode_pillar(pillar_name):
 
 
 def run_pillar(pillar_name):
-    """
+    '''
     Run one or more nagios plugins from pillar data and get the result of cdm.run
     The pillar have to be in this format:
     ------
@@ -211,15 +217,14 @@ def run_pillar(pillar_name):
     .. code-block:: bash
 
         salt '*' nagios.run webserver
-
-    """
+    '''
     data = _execute_pillar(pillar_name, run)
 
     return data
 
 
 def run_all_pillar(pillar_name):
-    """
+    '''
     Run one or more nagios plugins from pillar data and get the result of cdm.run_all
     The pillar have to be in this format:
     ------
@@ -239,14 +244,13 @@ def run_all_pillar(pillar_name):
     .. code-block:: bash
 
         salt '*' nagios.run webserver
-
-    """
+    '''
     data = _execute_pillar(pillar_name, run_all)
     return data
 
 
 def list_plugins():
-    """
+    '''
     List all the nagios plugins
 
     CLI Example:
@@ -254,9 +258,7 @@ def list_plugins():
     .. code-block:: bash
 
         salt '*' nagios.list_plugins
-
-    """
-
+    '''
     plugin_list = os.listdir(PLUGINDIR)
     ret = []
     for plugin in plugin_list:
