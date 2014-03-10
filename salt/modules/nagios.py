@@ -203,7 +203,7 @@ def run_pillar(pillar_name):
     ------
     webserver:
         Ping_google:
-            - check_icm:8.8.8.8
+            - check_icmp:8.8.8.8
             - check_icmp:google.com
         Load:
             - check_load:-w 0.8 -c 1
@@ -230,7 +230,7 @@ def run_all_pillar(pillar_name):
     ------
     webserver:
         Ping_google:
-            - check_icmp:8.8.8.8
+            - check_icm:8.8.8.8
             - check_icmp:google.com
         Load:
             - check_load:-w 0.8 -c 1
