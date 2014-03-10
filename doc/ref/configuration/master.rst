@@ -180,6 +180,19 @@ The directory to store the pki authentication keys.
 
     pki_dir: /etc/salt/pki
 
+.. conf_master:: extension_modules
+
+``extension_modules``
+---------------------
+
+Directory for custom modules. This directory can contain subdirectories for
+each of Salt's module types such as "runners", "output", "wheel", "modules",
+"states", "returners", etc. This path is appended to :conf_master:`root_dir`.
+
+.. code-block:: yaml
+
+    extension_modules: srv/modules
+
 .. conf_master:: cachedir
 
 ``cachedir``
@@ -232,7 +245,7 @@ Set the default timeout for the salt command and api.
 
 Default: ``60``
 
-The loop_interval option controls the seconds for the master's maintinance
+The loop_interval option controls the seconds for the master's maintenance
 process check cycle. This process updates file server backends, cleans the
 job cache and executes the scheduler.
 
@@ -606,16 +619,16 @@ at the moment a single state fails
 ``state_verbose``
 -----------------
 
-Default: ``False``
+Default: ``True``
 
-state_verbose allows for the data returned from the minion to be more
-verbose. Normally only states that fail or states that have changes are
-returned, but setting state_verbose to ``True`` will return all states that
-were checked
+Controls the verbosity of state runs. By default, the results of all states are
+returned, but setting this value to ``False`` will cause salt to only display
+output for states which either failed, or succeeded without making any changes
+to the minion.
 
 .. code-block:: yaml
 
-    state_verbose: True
+    state_verbose: False
 
 .. conf_master:: state_output
 
@@ -933,6 +946,60 @@ Defines which branch/tag should be used as the ``base`` environment.
 
     gitfs_base: salt
 
+.. conf_master:: gitfs_env_whitelist
+
+``gitfs_env_whitelist``
+***********************
+
+.. versionadded:: Helium
+
+Default: ``[]``
+
+Used to restrict which environments are made available. Can speed up state runs
+if your gitfs remotes contain many branches/tags. Full names, globs, and
+regular expressions are accepted.
+
+If used, only branches/tags/SHAs which match one of the specified expressions
+will be exposed as fileserver environments.
+
+If used in conjunction with :conf_master:`gitfs_env_blacklist`, then the subset
+of hosts which match the whitelist but do *not* match the blacklist will be
+exposed as fileserver environments.
+
+.. code-block:: yaml
+
+    gitfs_env_whitelist:
+      - base
+      - v1.*
+      - 'mybranch\d+'
+
+.. conf_master:: gitfs_env_blacklist
+
+``gitfs_env_blacklist``
+***********************
+
+.. versionadded:: Helium
+
+Default: ``[]``
+
+Used to restrict which environments are made available. Can speed up state runs
+if your gitfs remotes contain many branches/tags. Full names, globs, and
+regular expressions are accepted.
+
+If used, branches/tags/SHAs which match one of the specified expressions will
+*not* be exposed as fileserver environments.
+
+If used in conjunction with :conf_master:`gitfs_env_whitelist`, then the subset
+of hosts which match the whitelist but do *not* match the blacklist will be
+exposed as fileserver environments.
+
+.. code-block:: yaml
+
+    gitfs_env_blacklist:
+      - base
+      - v1.*
+      - 'mybranch\d+'
+
 hg: Mercurial Remote File Server Backend
 ----------------------------------------
 
@@ -1073,7 +1140,7 @@ svn: Subversion Remote File Server Backend
 .. conf_master:: svnfs_remotes
 
 ``svnfs_remotes``
-****************
+*****************
 
 .. versionadded:: 0.17.0
 
@@ -1646,7 +1713,7 @@ option then the master will log a warning message.
 
 
 Windows Software Repo Settings
-------------------------------
+==============================
 
 .. conf_master:: win_repo
 

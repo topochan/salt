@@ -11,6 +11,11 @@ A Salt runner can be a simple client call or a complex application.
 
 .. seealso:: :ref:`The full list of runners <all-salt.runners>`
 
+.. toctree::
+    :hidden:
+
+    all/index
+
 Writing Salt Runners
 --------------------
 
@@ -25,6 +30,9 @@ invoked with the following command:
 .. code-block:: bash
 
     # salt-run test.foo
+
+To add custom runners, put them in a directory and add it to
+:conf_master:`runner_dirs` in the master configuration file.
 
 Examples
 --------

@@ -100,9 +100,17 @@ loaded as simply ``redis``:
     except ImportError:
         HAS_REDIS = False
 
+    __virtualname__ = 'redis'
+
     def __virtual__():
         if not HAS_REDIS:
             return False
-        return 'redis'
+        return __virtualname__
+
+Full List of Returners
+======================
+
+.. toctree::
+    all/index
 
 .. _`redis`: https://github.com/saltstack/salt/tree/develop/salt/returners/redis_return.py

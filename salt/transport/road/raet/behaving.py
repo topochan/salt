@@ -18,12 +18,14 @@ raet.udp.stack.local
 raet.udp.stack.status
     joined allowed idle
 raet.udp.stack.destination
-    value ddid
+    value deid
 
 
 '''
 # pylint: skip-file
 # pylint: disable=W0611
+
+import os
 
 # Import Python libs
 from collections import deque
@@ -43,7 +45,7 @@ from ioflo.base import deeding
 from ioflo.base.consoling import getConsole
 console = getConsole()
 
-from . import raeting, packeting, stacking, devicing
+from . import raeting, packeting, estating, yarding, stacking
 
 
 class StackUdpRaet(deeding.Deed):  # pylint: disable=W0232
@@ -56,8 +58,11 @@ class StackUdpRaet(deeding.Deed):  # pylint: disable=W0232
         stack='stack',
         txmsgs=odict(ipath='txmsgs', ival=deque()),
         rxmsgs=odict(ipath='rxmsgs', ival=deque()),
-        local=odict(ipath='local', ival=odict(   name='minion',
-                                                 did=0,
+        local=odict(ipath='local', ival=odict(   name='master',
+                                                 dirpath='raet/test/keep',
+                                                 main=False,
+                                                 auto=True,
+                                                 eid=0,
                                                  host='0.0.0.0',
                                                  port=raeting.RAET_PORT,
                                                  sigkey=None,
@@ -69,10 +74,14 @@ class StackUdpRaet(deeding.Deed):  # pylint: disable=W0232
         '''
         sigkey = self.local.data.sigkey
         prikey = self.local.data.prikey
-        ha = (self.local.data.host, self.local.data.port)
         name = self.local.data.name
-        did = self.local.data.did
-        device = devicing.LocalDevice(  did=did,
+        dirpath = os.path.abspath(os.path.join(self.local.data.dirpath, name))
+        auto = self.local.data.auto
+        main = self.local.data.main
+        ha = (self.local.data.host, self.local.data.port)
+
+        eid = self.local.data.eid
+        estate = estating.LocalEstate(  eid=eid,
                                         name=name,
                                         ha=ha,
                                         sigkey=sigkey,
@@ -80,9 +89,12 @@ class StackUdpRaet(deeding.Deed):  # pylint: disable=W0232
         txMsgs = self.txmsgs.value
         rxMsgs = self.rxmsgs.value
 
-        self.stack.value = stacking.StackUdp(device=device,
+        self.stack.value = stacking.StackUdp(estate=estate,
                                        store=self.store,
                                        name=name,
+                                       auto=auto,
+                                       main=main,
+                                       dirpath=dirpath,
                                        txMsgs=txMsgs,
                                        rxMsgs=rxMsgs, )
 
@@ -102,8 +114,7 @@ class CloserStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
 
     def action(self, **kwa):
         '''
-        Receive any udp packets on server socket and put in rxes
-        Send any packets in txes
+        Close udp socket
         '''
         if self.stack.value and isinstance(self.stack.value, stacking.StackUdp):
             self.stack.value.serverUdp.close()
@@ -114,25 +125,19 @@ class JoinerStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
     '''
     Ioinits = odict(
         inode=".raet.udp.stack.",
-        stack='stack',
-        masterhost='.salt.etc.master',
-        masterport='.salt.etc.master_port', )
-
-    def postinitio(self):
-        self.mha = (self.masterhost.value, int(self.masterport.value))
+        stack='stack',)
 
     def action(self, **kwa):
         '''
-        Receive any udp packets on server socket and put in rxes
-        Send any packets in txes
+
         '''
         stack = self.stack.value
         if stack and isinstance(stack, stacking.StackUdp):
-            stack.join(mha=self.mha)
+            stack.join()
 
 class JoinedStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
     '''
-    Updates status with .joined of zeroth remote device (master)
+    Updates status with .joined of zeroth remote estate (master)
     '''
     Ioinits = odict(
         inode=".raet.udp.stack.",
@@ -148,8 +153,8 @@ class JoinedStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
         stack = self.stack.value
         joined = False
         if stack and isinstance(stack, stacking.StackUdp):
-            if stack.devices:
-                joined = stack.devices.values()[0].joined
+            if stack.estates:
+                joined = stack.estates.values()[0].joined
         self.status.update(joined=joined)
 
 class AllowerStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
@@ -172,7 +177,7 @@ class AllowerStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
 
 class AllowedStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
     '''
-    Updates status with .allowed of zeroth remote device (master)
+    Updates status with .allowed of zeroth remote estate (master)
     '''
     Ioinits = odict(
         inode=".raet.udp.stack.",
@@ -188,8 +193,8 @@ class AllowedStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
         stack = self.stack.value
         allowed = False
         if stack and isinstance(stack, stacking.StackUdp):
-            if stack.devices:
-                allowed = stack.devices.values()[0].allowed
+            if stack.estates:
+                allowed = stack.estates.values()[0].allowed
         self.status.update(allowed=allowed)
 
 class IdledStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
@@ -216,9 +221,9 @@ class IdledStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
 
 class MessengerStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
     '''
-    Puts message on txMsgs deque sent to ddid
+    Puts message on txMsgs deque sent to deid
     Message is composed fields that are parameters to action method
-    and is sent to remote device ddid
+    and is sent to remote estate deid
     '''
     Ioinits = odict(
         inode=".raet.udp.stack.",
@@ -233,8 +238,8 @@ class MessengerStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
             msg = odict(kwa)
             stack = self.stack.value
             if stack and isinstance(stack, stacking.StackUdp):
-                ddid = self.destination.value
-                stack.txMsg(msg=msg, ddid=ddid)
+                deid = self.destination.value
+                stack.txMsg(msg=msg, deid=deid)
 
 
 class PrinterStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
@@ -256,3 +261,117 @@ class PrinterStackUdpRaet(deeding.Deed):  # pylint: disable=W0232
 
 
 
+class StackUxdRaet(deeding.Deed):  # pylint: disable=W0232
+    '''
+    StackUxdRaet initialize and run raet uxd stack
+
+    '''
+    Ioinits = odict(
+        inode="raet.uxd.stack.",
+        stack='stack',
+        txmsgs=odict(ipath='txmsgs', ival=deque()),
+        rxmsgs=odict(ipath='rxmsgs', ival=deque()),
+        local=odict(ipath='local', ival=odict(name='minion',
+                                              yardname="",
+                                              lane="maple")),)
+
+    def postinitio(self):
+        '''
+        Setup stack instance
+        '''
+        name = self.local.data.name
+        yardname = self.local.data.yardname
+        lane = self.local.data.lane
+        txMsgs = self.txmsgs.value
+        rxMsgs = self.rxmsgs.value
+
+        self.stack.value = stacking.StackUxd(
+                                       store=self.store,
+                                       name=name,
+                                       yardname=yardname,
+                                       lanename=lane,
+                                       txMsgs=txMsgs,
+                                       rxMsgs=rxMsgs, )
+
+    def action(self, **kwa):
+        '''
+        Service all the deques for the stack
+        '''
+        self.stack.value.serviceAll()
+
+class CloserStackUxdRaet(deeding.Deed):  # pylint: disable=W0232
+    '''
+    CloserStackUxdRaet closes stack server socket connection
+    '''
+    Ioinits = odict(
+        inode=".raet.uxd.stack.",
+        stack='stack',)
+
+    def action(self, **kwa):
+        '''
+        Close uxd socket
+        '''
+        if self.stack.value and isinstance(self.stack.value, stacking.StackUxd):
+            self.stack.value.serverUxd.close()
+
+class AddYardStackUxdRaet(deeding.Deed):  # pylint: disable=W0232
+    '''
+    AddYardStackUxdRaet closes stack server socket connection
+    '''
+    Ioinits = odict(
+        inode=".raet.uxd.stack.",
+        stack='stack',
+        yard='yard',
+        local=odict(ipath='local', ival=odict(name=None, lane="maple")),)
+
+    def action(self, lane="lane", name=None, **kwa):
+        '''
+        Adds new yard to stack on lane with yid
+        '''
+        stack = self.stack.value
+        if stack and isinstance(stack, stacking.StackUxd):
+            yard = yarding.Yard(stack=stack, prefix=lane, name=name)
+            stack.addRemoteYard(yard)
+            self.yard.value = yard
+
+class TransmitStackUxdRaet(deeding.Deed):  # pylint: disable=W0232
+    '''
+    Puts message on txMsgs deque sent to deid
+    Message is composed fields that are parameters to action method
+    and is sent to remote estate deid
+    '''
+    Ioinits = odict(
+        inode=".raet.uxd.stack.",
+        stack="stack",
+        dest="dest",)
+
+    def action(self, **kwa):
+        '''
+        Queue up message
+        '''
+        if kwa:
+            msg = odict(kwa)
+            stack = self.stack.value
+            if stack and isinstance(stack, stacking.StackUxd):
+                name = self.dest.value #destination yard name
+                stack.transmit(msg=msg, name=name)
+
+
+class PrinterStackUxdRaet(deeding.Deed):  # pylint: disable=W0232
+    '''
+    Prints out messages on rxMsgs queue
+    '''
+    Ioinits = odict(
+        inode=".raet.uxd.stack.",
+        stack="stack",
+        rxmsgs=odict(ipath='rxmsgs', ival=deque()),)
+
+    def action(self, **kwa):
+        '''
+        Queue up message
+        '''
+        rxMsgs = self.rxmsgs.value
+        stack = self.stack.value
+        while rxMsgs:
+            msg = rxMsgs.popleft()
+            console.terse("\n{0} Received....\n{1}\n".format(stack.name, msg))

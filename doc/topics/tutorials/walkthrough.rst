@@ -43,7 +43,7 @@ Starting Salt
 -------------
 
 Salt functions on a master/minion topology. A master server acts as a
-central control bus for the clients, which called ``minions``. The minions
+central control bus for the clients, which are called ``minions``. The minions
 connect back to the master.
 
 
@@ -284,7 +284,8 @@ connected.
 Of course, there are hundreds of other modules that can be called just as ``test.ping`` can.
 For example, the following would return disk usage on all targeted minions:
 
-.. code-block::
+.. code-block:: bash
+
     salt '*' disk.percent
 
 

@@ -1,3 +1,5 @@
+.. _renderers:
+
 =========
 Renderers
 =========
@@ -50,6 +52,7 @@ Below, the first line is a shebang that references the ``py`` renderer.
                 'python-mako': {'pkg': ['installed']}}
 
 
+.. _renderers-composing:
 
 Composing Renderers
 -------------------
@@ -148,3 +151,9 @@ Here is a simple YAML renderer example:
             yaml_data = yaml_data.read()
         data = yaml.load(yaml_data)
         return data if data else {}
+
+Full List of Renderers
+======================
+.. toctree::
+
+    all/index

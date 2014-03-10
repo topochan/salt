@@ -1155,7 +1155,6 @@ def path():
     '''
     # Provides:
     #   path
-
     return {'path': os.environ['PATH'].strip()}
 
 
@@ -1195,6 +1194,16 @@ def saltversion():
     #   saltversion
     from salt.version import __version__
     return {'saltversion': __version__}
+
+
+def zmqversion():
+    '''
+    Return the zeromq version
+    '''
+    # Provides:
+    #   zmqversion
+    import zmq
+    return {'zmqversion': zmq.zmq_version()}
 
 
 def saltversioninfo():

@@ -2,8 +2,9 @@
 
 house minion
 
-init .raet.udp.stack.local to did 0 name "minion" host "" port 7531
+init .raet.udp.stack.local to eid 0 name "minion" host "" port 7531
 init port in .raet.udp.stack.local from value in .salt.etc.raet_port
+init name in .raet.udp.stack.local from value in .salt.etc.id
 
 
 framer minionudpstack be active first start
@@ -16,7 +17,7 @@ framer bootstrap be active first join
    frame join
       print Joining...
       enter
-         do raet udp stack joiner per inode ".raet.udp.stack."
+         do salt raet udp stack joiner per inode ".raet.udp.stack."
       recur
          do raet udp stack joined per inode ".raet.udp.stack."
 
@@ -49,10 +50,17 @@ framer bootstrap be active first join
             per inode ".raet.udp.stack."
       go next
 
-   frame idle
-      print Idling...
-      do raet udp stack idled per inode ".raet.udp.stack."
-      go abort if idled in .raet.udp.stack.status
+   frame loading
+      enter
+         do load modules
+      go next
+
+   frame router
+      do minion router
 
    frame abort
       bid stop all
+
+framer functionmanager be active first checkexec
+   frame checkexec
+      do nix function

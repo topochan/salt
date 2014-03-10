@@ -2,6 +2,13 @@
 Salt 2014.1.0 Release Notes - Codename Hydrogen
 ===============================================
 
+.. note::
+
+   Due to a change in master to minion communication, 2014.1.0 minions are not
+   compatible with older-version masters.  Please upgrade masters first.
+   More info on backwards-compatibility policy :doc:`here
+   </topics/installation/index>`, under the "Upgrading Salt" subheading.
+
 :release: 2014-02-24
 
 The 2014.1.0 release of Salt is a major release which not only increases
@@ -222,7 +229,7 @@ Proxy Minions
 -------------
 
 Initial basic support for Proxy Minions is in this release. Documentation can
-be found :doc:`here </topics/proxyminion/index>`.
+be found :doc:`here </topics/topology/proxyminion/index>`.
 
 Proxy minions are a developing feature in Salt that enables control of devices
 that cannot run a minion. Examples include network gear like switches and

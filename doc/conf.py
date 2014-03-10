@@ -55,6 +55,11 @@ MOCK_MODULES = [
     'libcloud.compute.deployment',
     'libcloud.compute.providers',
     'libcloud.compute.types',
+    'libcloud.loadbalancer',
+    'libcloud.loadbalancer.types',
+    'libcloud.loadbalancer.providers',
+    'libcloud.common',
+    'libcloud.common.google',
     # modules, renderers, states, returners, et al
     'django',
     'libvirt',
@@ -209,7 +214,7 @@ html_last_updated_fmt = '%b %d, %Y'
 html_show_sourcelink = False
 html_show_sphinx = True
 html_show_copyright = True
-#html_use_opensearch = ''
+html_use_opensearch = 'http://docs.saltstack.com'
 
 ### Latex options
 latex_documents = [

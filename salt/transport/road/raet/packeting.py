@@ -12,9 +12,17 @@ try:
 except ImportError:
     import json
 
+try:
+    import msgpack
+except ImportError:
+    mspack = None
+
 # Import ioflo libs
 from ioflo.base.odicting import odict
 from ioflo.base.aiding import packByte, unpackByte
+
+from ioflo.base.consoling import getConsole
+console = getConsole()
 
 from . import raeting
 
@@ -86,10 +94,12 @@ class TxHead(Head):
                 emsg = "Head length of {0}, exceeds max of {1}".format(hl, MAX_HEAD_SIZE)
                 raise raeting.PacketError(emsg)
             data['hl'] = hl
-            pl = hl + self.packet.coat.size + data['fl']
-            if pl > raeting.MAX_PACKET_SIZE:
-                emsg = "Packet length of {0}, exceeds max of {1}".format(hl, MAX_PACKET_SIZE)
+
+            if self.packet.coat.size > raeting.MAX_MESSAGE_SIZE:
+                emsg = "Packet length of {0}, exceeds max of {1}".format(
+                         self.packet.coat.size, raeting.MAX_MESSAGE_SIZE)
                 raise raeting.PacketError(emsg)
+            pl = hl + self.packet.coat.size + data['fl']
             data['pl'] = pl
             #subsitute true length converted to 2 byte hex string
             packed = packed.replace('"pl":"0000000"', '"pl":"{0}"'.format("{0:07x}".format(pl)[-7:]), 1)
@@ -185,8 +195,13 @@ class TxBody(Body):
         if bk == raeting.bodyKinds.json:
             if self.data:
                 self.packed = json.dumps(self.data, separators=(',', ':'))
-
-        if bk == raeting.bodyKinds.raw:
+        elif bk == raeting.bodyKinds.msgpack:
+            if self.data:
+                if not msgpack:
+                    emsg = "Msgpack not installed."
+                    raise raeting.PacketError(emsg)
+                self.packed = msgpack.dumps(self.data)
+        elif bk == raeting.bodyKinds.raw:
             self.packed = self.data # data is already formatted string
 
 class RxBody(Body):
@@ -214,10 +229,18 @@ class RxBody(Body):
                     emsg = "Packet body not a mapping."
                     raise raeting.PacketError(emsg)
                 self.data = kit
-
-        if bk == raeting.bodyKinds.raw:
+        elif bk == raeting.bodyKinds.msgpack:
+            if self.packed:
+                if not msgpack:
+                    emsg = "Msgpack not installed."
+                    raise raeting.PacketError(emsg)
+                kit = msgpack.loads(self.packed, object_pairs_hook=odict)
+                if not isinstance(kit, Mapping):
+                    emsg = "Packet body not a mapping."
+                    raise raeting.PacketError(emsg)
+                self.data = kit
+        elif bk == raeting.bodyKinds.raw:
             self.data = self.packed # return as string
-
         elif bk == raeting.bodyKinds.nada:
             pass
 
@@ -438,16 +461,28 @@ class TxPacket(Packet):
     @property
     def index(self):
         '''
-        Property is transaction tuple (rf, ld, rd, si, ti, bf,)
+        Property is transaction tuple (rf, le, re, si, ti, bf,)
         '''
         data = self.data
-        return ((data['cf'], data['sd'], data['dd'], data['si'], data['ti'], data['bf']))
+        le = data['se']
+        if le == 0:
+            #host = data['sh']
+            #if host == '0.0.0.0':
+                #host = '127.0.0.1'
+            le = (data['sh'], data['sp'])
+        re = data['de']
+        if re == 0:
+            #host = data['dh']
+            #if host == '0.0.0.0':
+                #host = '127.0.0.1'
+            re = (data['dh'], data['dp'])
+        return ((data['cf'], le, re, data['si'], data['ti'], data['bf']))
 
     def signature(self, msg):
         '''
         Return signature resulting from signing msg
         '''
-        return (self.stack.device.signer.signature(msg))
+        return (self.stack.estate.signer.signature(msg))
 
     def sign(self):
         '''
@@ -463,7 +498,7 @@ class TxPacket(Packet):
         Return (cipher, nonce) duple resulting from encrypting message
         with short term keys
         '''
-        remote = self.stack.devices[self.data['dd']]
+        remote = self.stack.estates[self.data['de']]
         return (remote.privee.encrypt(msg, remote.publee.key))
 
     def pack(self):
@@ -478,7 +513,7 @@ class TxPacket(Packet):
                                self.coat.packed,
                                self.foot.packed])
 
-        if self.size <= raeting.MAX_SEGMENT_SIZE:
+        if self.size <= raeting.MAX_PACKET_SIZE:
             self.sign()
         else:
             #print "****Segmentize**** packet size = {0}".format(self.size)
@@ -497,7 +532,7 @@ class TxPacket(Packet):
             extrasize = 32 # extra header size as a result of segmentation
 
         hotelsize = self.head.size + extrasize + self.foot.size
-        haulsize = raeting.MAX_SEGMENT_SIZE - hotelsize
+        haulsize = raeting.MAX_PACKET_SIZE - hotelsize
 
         segcount = (fullsize // haulsize) + (1 if fullsize % haulsize else 0)
         for i in range(segcount):
@@ -538,23 +573,35 @@ class RxPacket(Packet):
     @property
     def index(self):
         '''
-        Property is transaction tuple (rf, ld, rd, si, ti, bf,)
+        Property is transaction tuple (rf, le, re, si, ti, bf,)
         '''
         data = self.data
-        return ((not data['cf'], data['dd'], data['sd'], data['si'], data['ti'], data['bf']))
+        le = data['de']
+        if le == 0:
+            #host = data['dh']
+            #if host == '0.0.0.0':
+                #host = '127.0.0.1'
+            le = (data['dh'], data['dp'])
+        re = data['se']
+        if re == 0:
+            #host = data['sh']
+            #if host == '0.0.0.0':
+                #host = '127.0.0.1'
+            re = (data['sh'], data['sp'])
+        return ((not data['cf'], le, re, data['si'], data['ti'], data['bf']))
 
     def verify(self, signature, msg):
         '''
         Return result of verifying msg with signature
         '''
-        return (self.stack.devices[self.data['sd']].verfer.verify(signature, msg))
+        return (self.stack.estates[self.data['se']].verfer.verify(signature, msg))
 
     def decrypt(self, cipher, nonce):
         '''
         Return msg resulting from decrypting cipher and nonce
         with short term keys
         '''
-        remote = self.stack.devices[self.data['sd']]
+        remote = self.stack.estates[self.data['se']]
         return (remote.privee.decrypt(cipher, nonce, remote.publee.key))
 
     def parse(self, packed=None):

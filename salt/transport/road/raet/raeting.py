@@ -41,8 +41,8 @@ header data =
     hk: Header kind   (HeadKind) Default 0
     hl: Header length (HeadLen) Default 0
 
-    sd: Source Device ID (SDID)
-    dd: Destination Device ID (DDID)
+    se: Source Estate ID (SEID)
+    de: Destination Estate ID (DEID)
     cf: Correspondent Flag (CrdtFlag) Default 0
     bf: BroadCast Flag (BcstFlag)  Default 0
 
@@ -102,7 +102,7 @@ from ioflo.base.odicting import odict
 
 UDP_MAX_SAFE_PAYLOAD = 548  # IPV4 MTU 576 - udp headers 28
 # IPV6 MTU is 1280 but headers are bigger
-MAX_SEGMENT_SIZE = 1024 # assuming IPV6 capable equipment
+MAX_PACKET_SIZE = 1024 # assuming IPV6 capable equipment
 MAX_SEGMENT_COUNT = (2 ** 16) - 1
 
 RAET_PORT = 7530
@@ -110,9 +110,10 @@ RAET_TEST_PORT = 7531
 DEFAULT_SRC_HOST = ''
 DEFAULT_DST_HOST = '127.0.0.1'
 
-MAX_PACKET_SIZE = min(67107840, MAX_SEGMENT_SIZE * MAX_SEGMENT_COUNT) # assuming IPV6 capable equipment
+MAX_MESSAGE_SIZE = min(67107840, MAX_PACKET_SIZE * MAX_SEGMENT_COUNT) # assuming IPV6 capable equipment
 MAX_HEAD_SIZE = 255
 JSON_END = '\r\n\r\n'
+HEAD_END = '\n\n'
 
 VERSIONS = odict([('0.1', 0)])
 VERSION_NAMES = odict((v, k) for k, v in VERSIONS.iteritems())
@@ -125,7 +126,7 @@ HeadKind = namedtuple('HeadKind', HEAD_KINDS.keys())
 headKinds = HeadKind(**HEAD_KINDS)  # headKinds.json is '00'
 
 
-BODY_KINDS = odict([('nada', 0), ('json', 1), ('raw', 2), ('msgpck', 3),
+BODY_KINDS = odict([('nada', 0), ('json', 1), ('raw', 2), ('msgpack', 3),
                     ('unknown', 255)])
 BODY_KIND_NAMES = odict((v, k) for k, v in BODY_KINDS.iteritems())  # inverse map
 BodyKind = namedtuple('BodyKind', BODY_KINDS.keys())
@@ -165,7 +166,7 @@ trnsKinds = TrnsKind(**TRNS_KINDS)
 
 PCKT_KINDS = odict([('message', 0), ('ack', 1), ('nack', 2),
                     ('request', 3), ('response', 4),
-                    ('hello', 4), ('cookie', 5), ('initiate', 6),
+                    ('hello', 5), ('cookie', 6), ('initiate', 7),
                     ('unknown', 255)])
 PCKT_KIND_NAMES = odict((v, k) for k, v in PCKT_KINDS.iteritems())  # inverse map
 PcktKind = namedtuple('PcktKind', PCKT_KINDS.keys())
@@ -176,6 +177,16 @@ COOKIESTUFF_PACKER = struct.Struct('<32sLL24s')
 COOKIE_PACKER = struct.Struct('<80s24s')
 INITIATESTUFF_PACKER = struct.Struct('<32s48s24s128s')
 INITIATE_PACKER = struct.Struct('32s24s248s24s')
+
+ACCEPTANCES = odict([('pending', 0), ('accepted', 1), ('rejected', 2),])
+ACCEPTANCE_NAMES = odict((v, k) for k, v in ACCEPTANCES.iteritems())  # inverse map
+Acceptance = namedtuple('Acceptance', ACCEPTANCES.keys())
+acceptances = Acceptance(**ACCEPTANCES)
+
+PACK_KINDS = odict([('json', 0), ('pack', 1)])
+PACK_KIND_NAMES = odict((v, k) for k, v in PACK_KINDS.iteritems())  # inverse map
+PackKind = namedtuple('PackKind', PACK_KINDS.keys())
+packKinds = PackKind(**PACK_KINDS)
 
 # head fields that may be included in json header if not default value
 PACKET_DEFAULTS = odict([
@@ -189,8 +200,8 @@ PACKET_DEFAULTS = odict([
                             ('pl', 0),
                             ('hk', 0),
                             ('hl', 0),
-                            ('sd', 0),
-                            ('dd', 0),
+                            ('se', 0),
+                            ('de', 0),
                             ('cf', False),
                             ('bf', False),
                             ('si', 0),
@@ -213,12 +224,12 @@ PACKET_DEFAULTS = odict([
 
 PACKET_FIELDS = ['sh', 'sp', 'dh', 'dp',
                  'ri', 'vn', 'pk', 'pl', 'hk', 'hl',
-                 'sd', 'dd', 'cf', 'bf', 'si', 'ti', 'tk',
+                 'se', 'de', 'cf', 'bf', 'si', 'ti', 'tk',
                  'dt', 'oi', 'pf', 'sn', 'sc', 'sl', 'sf', 'af',
                  'bk', 'ck', 'fk', 'fl', 'fg']
 
 HEAD_FIELDS = ['ri', 'vn', 'pk', 'pl', 'hk', 'hl',
-               'sd', 'dd', 'cf', 'bf', 'si', 'ti', 'tk',
+               'se', 'de', 'cf', 'bf', 'si', 'ti', 'tk',
                'dt', 'oi', 'pf', 'sn', 'sc', 'sl', 'sf', 'af',
                'bk', 'bl', 'ck', 'cl', 'fk', 'fl', 'fg']
 
@@ -231,7 +242,7 @@ class RaetError(Exception):
     Exceptions in RAET Protocol processing
 
        usage:
-           emsg = "Invalid device id '{0}'".format(did)
+           emsg = "Invalid estate id '{0}'".format(eid)
            raise raeting.RaetError(emsg)
     '''
     def __init__(self, message=None):
@@ -247,18 +258,18 @@ class StackError(RaetError):
        Exceptions in RAET stack processing
 
        Usage:
-            emsg = "Invalid device id '{0}'".format(did)
+            emsg = "Invalid estate id '{0}'".format(eid)
             raise raeting.StackError(emsg)
     '''
     pass
 
-class DeviceError(RaetError):
+class EstateError(RaetError):
     '''
-       Exceptions in RAET device processing
+       Exceptions in RAET estate processing
 
        Usage:
-            emsg = "Invalid device id '{0}'".format(did)
-            raise raeting.DeviceError(emsg)
+            emsg = "Invalid estate id '{0}'".format(eid)
+            raise raeting.EstateError(emsg)
     '''
     pass
 
@@ -267,7 +278,7 @@ class TransactionError(RaetError):
        Exceptions in RAET transaction processing
 
        Usage:
-            emsg = "Invalid device id '{0}'".format(did)
+            emsg = "Invalid estate id '{0}'".format(eid)
             raise raeting.TransactionError(emsg)
     '''
     pass
@@ -277,7 +288,27 @@ class PacketError(RaetError):
        Exceptions in RAET packet processing
 
        Usage:
-            emsg = "Invalid device id '{0}'".format(did)
+            emsg = "Invalid estate id '{0}'".format(eid)
             raise raeting.PacketError(emsg)
+    '''
+    pass
+
+class KeepError(RaetError):
+    '''
+       Exceptions in RAET keep processing
+
+       Usage:
+            emsg = "Invalid estate id '{0}'".format(eid)
+            raise raeting.KeepError(emsg)
+    '''
+    pass
+
+class YardError(RaetError):
+    '''
+       Exceptions in RAET estate processing
+
+       Usage:
+            emsg = "Invalid estate id '{0}'".format(eid)
+            raise raeting.YardError(emsg)
     '''
     pass

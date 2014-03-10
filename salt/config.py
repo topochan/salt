@@ -11,6 +11,7 @@ import socket
 import logging
 import urlparse
 from copy import deepcopy
+import time
 
 # import third party libs
 import yaml
@@ -50,6 +51,7 @@ VALID_OPTS = {
     'master': str,
     'master_port': int,
     'master_finger': str,
+    'syndic_finger': str,
     'user': str,
     'root_dir': str,
     'pki_dir': str,
@@ -137,6 +139,8 @@ VALID_OPTS = {
     'gitfs_mountpoint': str,
     'gitfs_root': str,
     'gitfs_base': str,
+    'gitfs_env_whitelist': list,
+    'gitfs_env_blacklist': list,
     'hgfs_remotes': list,
     'hgfs_mountpoint': str,
     'hgfs_root': str,
@@ -175,6 +179,7 @@ VALID_OPTS = {
     'minion_data_cache': bool,
     'publish_session': int,
     'reactor': list,
+    'reactor_refresh_interval': int,
     'serial': str,
     'search': str,
     'search_index_interval': int,
@@ -212,6 +217,7 @@ DEFAULT_MINION_OPTS = {
     'master': 'salt',
     'master_port': '4506',
     'master_finger': '',
+    'syndic_finger': '',
     'user': 'root',
     'root_dir': salt.syspaths.ROOT_DIR,
     'pki_dir': os.path.join(salt.syspaths.CONFIG_DIR, 'pki', 'minion'),
@@ -338,6 +344,8 @@ DEFAULT_MASTER_OPTS = {
     'gitfs_mountpoint': '',
     'gitfs_root': '',
     'gitfs_base': 'master',
+    'gitfs_env_whitelist': [],
+    'gitfs_env_blacklist': [],
     'hgfs_remotes': [],
     'hgfs_mountpoint': '',
     'hgfs_root': '',
@@ -399,6 +407,7 @@ DEFAULT_MASTER_OPTS = {
     'cluster_mode': 'paranoid',
     'range_server': 'range:80',
     'reactor': [],
+    'reactor_refresh_interval': 60,
     'serial': 'msgpack',
     'state_verbose': True,
     'state_output': 'full',
@@ -426,7 +435,7 @@ DEFAULT_MASTER_OPTS = {
     'keysize': 4096,
     'transport': 'zeromq',
     'enumerate_proxy_minions': False,
-    'gather_job_timeout': 2,
+    'gather_job_timeout': 5,
     'syndic_event_forward_timeout': 0.5,
     'syndic_max_event_process_time': 0.5,
     'ssh_passwd': '',
@@ -2036,8 +2045,11 @@ def client_config(path, env_var='SALT_CLIENT_CONFIG', defaults=None):
         )
     # If the token file exists, read and store the contained token
     if os.path.isfile(opts['token_file']):
-        with salt.utils.fopen(opts['token_file']) as fp_:
-            opts['token'] = fp_.read().strip()
+        # Make sure token is still valid
+        expire = opts.get('token_expire', 43200)
+        if os.stat(opts['token_file']).st_mtime + expire > time.mktime(time.localtime()):
+            with salt.utils.fopen(opts['token_file']) as fp_:
+                opts['token'] = fp_.read().strip()
     # On some platforms, like OpenBSD, 0.0.0.0 won't catch a master running on localhost
     if opts['interface'] == '0.0.0.0':
         opts['interface'] = '127.0.0.1'

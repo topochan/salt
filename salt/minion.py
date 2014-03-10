@@ -621,7 +621,8 @@ class Minion(MinionBase):
                     proxyminion.start(self.opts['pillar']['proxy'][p])
                     self.clean_die(signal.SIGTERM, None)
         else:
-            log.debug('I am {0} and I am not supposed to start any proxies.'.format(self.opts['id']))
+            log.debug('I am {0} and I am not supposed to start any proxies. '
+                      '(Likely not a problem)'.format(self.opts['id']))
 
     def _prep_mod_opts(self):
         '''
@@ -1218,11 +1219,10 @@ class Minion(MinionBase):
         self._running = False
         exit(0)
 
-    # Main Minion Tune In
-    def tune_in(self):
+    def _pre_tune(self):
         '''
-        Lock onto the publisher. This is the main event loop for the minion
-        :rtype : None
+        Set the minion running flag and issue the appropriate warnings if
+        the minion cannot be started or is already running
         '''
         if self._running is None:
             self._running = True
@@ -1256,6 +1256,14 @@ class Minion(MinionBase):
                 ),
                 exc_info=err
             )
+
+    # Main Minion Tune In
+    def tune_in(self):
+        '''
+        Lock onto the publisher. This is the main event loop for the minion
+        :rtype : None
+        '''
+        self._pre_tune()
 
         # Properly exit if a SIGTERM is signalled
         signal.signal(signal.SIGTERM, self.clean_die)
@@ -1363,6 +1371,8 @@ class Minion(MinionBase):
         management of the event bus assuming that these are handled outside
         the tune_in sequence
         '''
+
+        self._pre_tune()
         self._init_context_and_poller()
 
         self.socket = self.context.socket(zmq.SUB)

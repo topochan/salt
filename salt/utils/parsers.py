@@ -29,9 +29,27 @@ import salt.version as version
 import salt.syspaths as syspaths
 import salt.log.setup as log
 from salt.utils.validate.path import is_writeable
+from salt._compat import string_types
 
 if not utils.is_windows():
     import salt.cloud.exceptions
+
+
+def parse_args_kwargs(args):
+    '''
+    Parse out the args and kwargs from an args string
+    '''
+    _args = []
+    _kwargs = {}
+    for arg in args:
+        if isinstance(arg, string_types):
+            arg_name, arg_value = salt.utils.parse_kwarg(arg)
+            if arg_name:
+                _kwargs[arg_name] = arg_value
+            else:
+                _args.append(arg)
+
+    return _args, _kwargs
 
 
 def _sorted(mixins_or_funcs):
@@ -1665,6 +1683,9 @@ class SaltCMDOptionParser(OptionParser, ConfigDirMixIn, MergeConfigMixIn,
                 else:
                     self.config['fun'] = self.args[1]
                     self.config['arg'] = self.args[2:]
+
+                # parse the args and kwargs before sending to the publish interface
+                self.config['arg'] = salt.client.condition_kwarg(*parse_args_kwargs(self.config['arg']))
             except IndexError:
                 self.exit(42, '\nIncomplete options passed.\n\n')
 
@@ -1913,7 +1934,7 @@ class SaltKeyOptionParser(OptionParser, ConfigDirMixIn, MergeConfigMixIn,
         # Filter accepted list arguments as soon as possible
         if not self.options.list:
             return
-        if not self.options.list.startswith(('acc', 'pre', 'un', 'rej')):
+        if not self.options.list.startswith(('acc', 'pre', 'un', 'rej', 'all')):
             self.error(
                 '{0!r} is not a valid argument to \'--list\''.format(
                     self.options.list
@@ -2109,6 +2130,23 @@ class SaltRunOptionParser(OptionParser, ConfigDirMixIn, MergeConfigMixIn,
             help=('Display documentation for runners, pass a runner or '
                   'runner.function to see documentation on only that runner '
                   'or function.')
+        )
+        group = self.output_options_group = optparse.OptionGroup(
+            self, 'Output Options', 'Configure your preferred output format'
+        )
+        self.add_option_group(group)
+
+        group.add_option(
+            '--no-color', '--no-colour',
+            default=False,
+            action='store_true',
+            help='Disable all colored output'
+        )
+        group.add_option(
+            '--force-color', '--force-colour',
+            default=False,
+            action='store_true',
+            help='Force colored output'
         )
 
     def _mixin_after_parsed(self):

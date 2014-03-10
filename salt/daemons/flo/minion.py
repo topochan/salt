@@ -10,6 +10,7 @@ import sys
 import types
 import traceback
 import multiprocessing
+from collections import deque
 
 # Import salt libs
 import salt.minion
@@ -20,6 +21,9 @@ import salt.daemons.masterapi
 import salt.utils.schedule
 from salt.exceptions import (
         CommandExecutionError, CommandNotFoundError, SaltInvocationError)
+from salt.transport.road.raet import yarding
+from salt.transport.road.raet import stacking
+
 # Import ioflo libs
 import ioflo.base.deeding
 
@@ -40,65 +44,58 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
-class Router(ioflo.base.deeding.Deed):
+class RouterMinion(ioflo.base.deeding.Deed):  # pylint: disable=W0232
     '''
     Route packaets from raet into minion proessing bins
     '''
-    Ioinits = {'opts_store': '.salt.etc.opts',
-               'raet_udp_in': '.raet.udp.in',
-               'raet_sock_out': '.raet.sock.out',
+    Ioinits = {'opts': '.salt.opts',
+               'udp_stack': '.raet.udp.stack.stack',
+               'uxd_stack': '.salt.uxd.stack.stack',
                'fun_in': '.salt.net.fun_in',
                }
-
-    def __init__(self):
-        ioflo.base.deeding.Deed.__init__(self)
 
     def postinitio(self):
         '''
         Map opts for convenience
         '''
-        self.opts = self.opts_store.value
+        self.uxd_stack.value = stacking.StackUxd(
+                lanename=self.opts.value['id'],
+                yid=0,
+                dirpath=self.opts.value['sock_dir'])
+        self.fun_in.value = deque()
 
     def action(self):
         '''
         Empty the queues into process management queues
         '''
         # Start on the udp_in:
-        while True:
-            try:
-                data = self.raet_udp_in.value.pop()
-                # Check if the PID is not the default of 0 and pass directly to
-                # the raet socket handler
-                if data['dest'][1]:
-                    self.raet_sock_out.value.append(data)
-                if data['dest'][3] == 'fun':
-                    self.fun_in.value.append(data)
-            except IndexError:
-                break
+        # TODO: Route UXD messages
+        while self.udp_stack.value.rxMsgs:
+            data = self.udp_stack.value.rxMsgs.popleft()
+            if data['route']['dst'][2] == 'fun':
+                self.fun_in.value.append(data)
+            if data['route']['dst'][1] is not None:
+                if data['route']['dst'][1] in self.uxd_stack.value.yards:
+                    self.uxd_stack.value.transmit(data, data['route']['dst'][1])
+        self.uxd_stack.value.serviceAll()
+        while self.uxd_stack.value.rxMsgs:
+            msg = self.uxd_stack.value.rxMsgs.popleft()
+            estate = msg['route']['dst'][0]
+            if estate is not None:
+                if estate != self.opts.value['id']:
+                    self.udp_stack.value.message(
+                            msg,
+                            self.udp_stack.value.eids[estate])
 
 
-class PillarLoad(ioflo.base.deeding.Deed):
-    '''
-    Load up the pillar in the data store
-    '''
-    Ioinits = {'opts_store': '.salt.etc.opts',
-               'grains': '.salt.loader.grains'}
-
-    def __init__(self):
-        ioflo.base.deeding.Deed.__init__(self)
-
-
-class ModulesLoad(ioflo.base.deeding.Deed):
+class ModulesLoad(ioflo.base.deeding.Deed):  # pylint: disable=W0232
     '''
     Reload the minion modules
     '''
-    Ioinits = {'opts_store': '.salt.etc.opts',
+    Ioinits = {'opts_store': '.salt.opts',
                'grains': '.salt.loader.grains',
                'modules': '.salt.loader.modules',
                'returners': '.salt.loader.returners'}
-
-    def __init__(self):
-        ioflo.base.deeding.Deed.__init__(self)
 
     def postinitio(self):
         '''
@@ -141,18 +138,15 @@ class ModulesLoad(ioflo.base.deeding.Deed):
             resource.setrlimit(resource.RLIMIT_AS, old_mem_limit)
 
 
-class Schedule(ioflo.base.deeding.Deed):
+class Schedule(ioflo.base.deeding.Deed):  # pylint: disable=W0232
     '''
     Evaluates the scedule
     '''
-    Ioinits = {'opts_store': '.salt.etc.opts',
-               'grains': '.salt.etc.grains',
+    Ioinits = {'opts_store': '.salt.opts',
+               'grains': '.salt.grains',
                'modules': '.salt.loader.modules',
                'returners': '.salt.loader.returners',
                'master_ret': '.salt.net.master_out'}
-
-    def __init__(self):
-        ioflo.base.deeding.Deed.__init__(self)
 
     def postinitio(self):
         '''
@@ -170,20 +164,19 @@ class Schedule(ioflo.base.deeding.Deed):
         self.scedule.eval()
 
 
-class FunctionNix(ioflo.base.deeding.Deed):
+class FunctionNix(ioflo.base.deeding.Deed):  # pylint: disable=W0232
     '''
     Execute a function call
     '''
-    Ioinits = {'opts_store': '.salt.etc.opts',
-               'grains': '.salt.etc.grains',
+    Ioinits = {'opts_store': '.salt.opts',
+               'grains': '.salt.grains',
                'modules': '.salt.loader.modules',
                'returners': '.salt.loader.returners',
                'fun_ack': '.salt.net.fun_ack',
                'fun_in': '.salt.net.fun_in',
-               'master_ret': '.salt.net.master_out'}
-
-    def __init__(self):
-        ioflo.base.deeding.Deed.__init__(self)
+               'master_ret': '.salt.net.master_out',
+               'uxd_stack': '.salt.uxd.stack.stack',
+               'executors': '.salt.track.executors'}
 
     def postinitio(self):
         '''
@@ -195,6 +188,27 @@ class FunctionNix(ioflo.base.deeding.Deed):
                 self.modules.value)
         self.proc_dir = salt.minion.get_proc_dir(self.opts['cachedir'])
         self.serial = salt.payload.Serial(self.opts)
+        self.executors.value = {}
+
+    def _return_pub(self, ret):
+        '''
+        Send the return data back via the uxd socket
+        '''
+        ret_stack = stacking.StackUxd(
+                lanename=self.opts['id'],
+                yid=ret['jid'],
+                dirpath=self.opts['sock_dir'])
+        main_yard = yarding.Yard(
+                yid=0,
+                prefix=self.opts['id'],
+                dirpath=self.opts['sock_dir']
+                )
+        ret_stack.addRemoteYard(main_yard)
+        route = {'src': (self.opts['id'], ret_stack.yard.name, 'jid_ret'),
+                 'dst': ('master', None, 'return')}
+        msg = {'route': route, 'return': ret}
+        ret_stack.transmit(msg, 'yard0')
+        ret_stack.serviceAll()
 
     def action(self):
         '''
@@ -202,8 +216,14 @@ class FunctionNix(ioflo.base.deeding.Deed):
         '''
         if not self.fun_in.value:
             return
-        exchange = self.fun_in.value.pop()
-        data = exchange['load']
+        exchange = self.fun_in.value.popleft()
+        data = exchange.get('pub')
+        # convert top raw strings - take this out once raet is using msgpack
+        for key, val in data.items():
+            if isinstance(val, basestring):
+                data[str(key)] = str(val)
+            else:
+                data[str(key)] = val
         match = getattr(
                 self.matcher,
                 '{0}_match'.format(
@@ -212,7 +232,6 @@ class FunctionNix(ioflo.base.deeding.Deed):
                 )(data['tgt'])
         if not match:
             return
-        self.fun_ack.value.append(exchange)
         if 'user' in data:
             log.info(
                     'User {0[user]} Executing command {0[fun]} with jid '
@@ -222,9 +241,14 @@ class FunctionNix(ioflo.base.deeding.Deed):
                     'Executing command {0[fun]} with jid {0[jid]}'.format(data)
                     )
         log.debug('Command details {0}'.format(data))
+        ex_yard = yarding.Yard(
+                yid=data['jid'],
+                prefix=self.opts['id'],
+                dirpath=self.opts['sock_dir'])
+        self.uxd_stack.value.addRemoteYard(ex_yard)
         process = multiprocessing.Process(
                 target=self.proc_run,
-                args=(exchange)
+                kwargs={'exchange': exchange}
                 )
         process.start()  # Don't join this process! The process daemonizes
                          # itself and init will clean it up
@@ -233,8 +257,9 @@ class FunctionNix(ioflo.base.deeding.Deed):
         '''
         Execute the run in a dedicated process
         '''
-        data = exchange['load']
+        data = exchange['pub']
         fn_ = os.path.join(self.proc_dir, data['jid'])
+        self.opts['__ex_id'] = data['jid']
         salt.utils.daemonize_if(self.opts)
         sdata = {'pid': os.getpid()}
         sdata.update(data)
@@ -319,7 +344,7 @@ class FunctionNix(ioflo.base.deeding.Deed):
         ret['jid'] = data['jid']
         ret['fun'] = data['fun']
         ret['fun_args'] = data['arg']
-        self._return_pub(ret)  # Needs attention
+        self._return_pub(ret)
         if data['ret']:
             ret['id'] = self.opts['id']
             for returner in set(data['ret'].split(',')):
